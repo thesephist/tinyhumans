@@ -1,0 +1,309 @@
+{
+	println: println
+	default: default
+	range: range
+	slice: slice
+	map: map
+	each: each
+	merge: merge
+	append: append
+	partition: partition
+} := import('std')
+math := import('math')
+{
+	integer: integer
+	number: number
+	choice: choice
+} := import('random')
+
+// global state
+InnerWidth := window.innerWidth
+InnerHeight := window.innerHeight
+Scale := 3
+Light := [InnerWidth, 0]
+Origins := []
+Heads := []
+Torsos := []
+LeftArms := []
+RightArms := []
+LeftLegs := []
+RightLegs := []
+
+// DOM bindings
+querySelector := bind(document, :querySelector)
+querySelectorAll := bind(document, :querySelectorAll)
+fn addHandler(el, name, handler) bind(el, :addEventListener)(string(name), handler)
+
+// Canvas bindings
+// TODO: explain late-bound canvas bindings
+Canvas := querySelector('#silhouettes')
+Ctx := bind(Canvas, :getContext)('2d')
+SilhouetteCanvas := querySelector('#silhouettes')
+SilhouetteCtx := bind(Canvas, :getContext)('2d')
+ShadowCanvas := querySelector('#shadows')
+ShadowCtx := bind(ShadowCanvas, :getContext)('2d')
+fn ctxCall(name, args...) bind(Ctx, name)(args...)
+
+fn path(points) {
+	start := points.0
+	ctxCall(:beginPath)
+	ctxCall(:moveTo, start.0, start.1)
+	points |> slice(1) |> with each() fn(pt) {
+		ctxCall(:lineTo, pt.0, pt.1)
+	}
+	ctxCall(:stroke)
+}
+
+fn fill(points) {
+	ctxCall(:beginPath)
+	start := points.0
+	ctxCall(:moveTo, start.0, start.1)
+	points |> slice(1) |> with each() fn(pt) {
+		ctxCall(:lineTo, pt.0, pt.1)
+	}
+	ctxCall(:fill)
+}
+
+fn circle(center, radius) {
+	ctxCall(:beginPath)
+	ctxCall(:arc, center.0, center.1, radius, 0, 2 * math.Pi)
+	ctxCall(:fill)
+}
+
+// angle takes an angle in degrees measured counterclockwise from south, and
+// returns radians from the positive right axis, clockwise.
+fn angle(deg)(-deg + 90) / 180 * math.Pi
+
+fn bearing(x, y, angle, dist) [
+	x + cos(angle) * dist
+	y + sin(angle) * dist
+]
+
+fn limb(start, deg1, len1, deg2, len2) [
+	p := start
+	p := bearing(p.0, p.1, angle(deg1), len1)
+	bearing(p.0, p.1, angle(deg1 + deg2), len2)
+]
+
+fn shadow(pt, origin) {
+	[x, y] := origin
+	[ox, oy] := pt
+	squish := (y - Light.1) / InnerHeight * 1.5
+	skew := (x - Light.0) / InnerWidth * 1.5
+	[
+		// skew horizontally
+		ox + skew * (y - oy)
+		// reflect over y, squish into y by squish factor
+		y - (oy - y) * squish
+	]
+}
+
+fn makeHuman(x, y, posture) {
+	posture := posture |> default({})
+	facing := posture.facing |> default(choice([:forward, :left, :right]))
+	posture := merge({
+		leftShoulder: number(-80, 0)
+		leftElbow: if facing {
+			:left -> number(-135, 0)
+			:right -> number(0, 30)
+			_ -> number(-135, 20)
+		}
+		rightShoulder: number(0, 80)
+		rightElbow: if facing {
+			:right -> number(0, 135)
+			:left -> number(-30, 0)
+			_ -> number(-20, 135)
+		}
+
+		leftHip: if facing {
+			:left -> number(-70, 30)
+			:right -> number(-80, 20)
+			_ -> number(10, 10)
+		}
+		leftKnee: if facing {
+			:left -> number(10, 80)
+			:right -> number(-80, -10)
+			_ -> number(0, 10)
+		}
+		rightHip: if facing {
+			:right -> number(-30, 70)
+			:left -> number(-20, 80)
+			_ -> number(10, 10)
+		}
+		rightKnee: if facing {
+			:right -> number(-80, -10)
+			:left -> number(10, 80)
+			_ -> number(-10, 0)
+		}
+	}, posture)
+
+	// define points
+	// TODO: add a child mode
+	Origins << [x, y]
+	Heads << if posture.facing {
+		:left -> [x + Scale, y - 11 * Scale]
+		:right -> [x + 2 * Scale, y - 11 * Scale]
+		_ -> [x + 1.5 * Scale, y - 11 * Scale]
+	}
+	Torsos << [
+		[x, y - 9 * Scale]
+		[x + 3 * Scale, y - 9 * Scale]
+		[x + 3 * Scale, y - 4 * Scale]
+		[x, y - 4 * Scale]
+	]
+	LeftArms << limb([x, y - 8 * Scale]
+		posture.leftShoulder, 2 * Scale
+		posture.leftElbow, 1.5 * Scale)
+	RightArms << limb([x + 3 * Scale, y - 8 * Scale]
+		posture.rightShoulder, 2 * Scale
+		posture.rightElbow, 1.5 * Scale)
+	LeftLegs << limb([x + Scale / 2, y - 4 * Scale]
+		posture.leftHip, 2 * Scale
+		posture.leftKnee, 2 * Scale)
+	RightLegs << limb([x + Scale * 2.5, y - 4 * Scale]
+		posture.rightHip, 2 * Scale
+		posture.rightKnee, 2 * Scale)
+}
+
+fn draw {
+	Ctx <- ShadowCtx
+	Ctx.lineWidth := Scale
+	Ctx.strokeStyle := 'rgba(0, 0, 0, .3)'
+	Ctx.fillStyle := 'rgba(0, 0, 0, .3)'
+	ctxCall(:clearRect, 0, 0, Canvas.width, Canvas.height)
+
+	// contact shadows
+	Heads |> with each() fn(head, i) {
+		circle(head |> shadow(Origins.(i)), Scale)
+	}
+	Torsos |> with each() fn(torso, i) {
+		origin := Origins.(i)
+		fill(torso |> map(fn(pt) shadow(pt, origin)))
+	}
+	LeftArms |> with each() fn(arm, i) {
+		origin := Origins.(i)
+		path(arm |> map(fn(pt) shadow(pt, origin)))
+	}
+	RightArms |> with each() fn(arm, i) {
+		origin := Origins.(i)
+		path(arm |> map(fn(pt) shadow(pt, origin)))
+	}
+	LeftLegs |> with each() fn(leg, i) {
+		origin := Origins.(i)
+		path(leg |> map(fn(pt) shadow(pt, origin)))
+	}
+	RightLegs |> with each() fn(leg, i) {
+		origin := Origins.(i)
+		path(leg |> map(fn(pt) shadow(pt, origin)))
+	}
+
+	Ctx <- SilhouetteCtx
+	Ctx.lineWidth := Scale
+	Ctx.lineCap := 'round'
+	Ctx.lineJoin := 'round'
+	Ctx.fillStyle := '#000000'
+	Ctx.filter := 'none'
+	ctxCall(:clearRect, 0, 0, Canvas.width, Canvas.height)
+
+	// tight contact shadow 
+	// TODO: explain why this exists
+	Gradients := Origins |> with map() fn(origin) {
+		[x, y] := origin
+		grad := ctxCall(:createLinearGradient
+			x + Scale, y
+			shadow([x + 1 * Scale, y - 4 * Scale], [x + Scale, y])...)
+		bind(grad, :addColorStop)(0, 'rgba(0, 0, 0, .2)')
+		bind(grad, :addColorStop)(1, 'rgba(0, 0, 0, 0)')
+		grad
+	}
+	LeftLegs |> with each() fn(leg, i) {
+		origin := Origins.(i)
+		grad := Gradients.(i)
+		Ctx.strokeStyle := grad
+		path(leg |> map(fn(pt) {
+			shadow(pt, origin)
+		}))
+	}
+	RightLegs |> with each() fn(leg, i) {
+		origin := Origins.(i)
+		grad := Gradients.(i)
+		Ctx.strokeStyle := grad
+		path(leg |> map(fn(pt) {
+			shadow(pt, origin)
+		}))
+	}
+
+	// silhouettes
+	Ctx.strokeStyle := '#000000'
+	Heads |> with each() fn(head) circle(head, Scale)
+	Torsos |> with each() fn(torso) fill(torso)
+	LeftArms |> with each() fn(arm) path(arm)
+	RightArms |> with each() fn(arm) path(arm)
+	LeftLegs |> with each() fn(leg) path(leg)
+	RightLegs |> with each() fn(leg) path(leg)
+}
+
+// handlers
+fn handleResize {
+	InnerWidth <- window.innerWidth
+	InnerHeight <- window.innerHeight
+
+	SilhouetteCanvas.width := InnerWidth
+	SilhouetteCanvas.height := InnerHeight
+	ShadowCanvas.width := InnerWidth
+	ShadowCanvas.height := InnerHeight
+	draw()
+}
+
+fn randomize(n) {
+	margin := Scale * 12
+
+	// TODO: disable spawning around the text boundary. This can be
+	// deterministically set because max width is smaller than mobile screens.
+	// A "more" button or something like that can just open a popup.
+	fn randomCoord [
+		integer(margin, InnerWidth - margin)
+		integer(margin, InnerHeight - margin)
+	]
+
+	range(n) |>
+		map(randomCoord) |>
+		with each() fn(pt) makeHuman(pt.0, pt.1)
+	draw()
+}
+
+// main
+handleResize()
+window |> addHandler(:resize, handleResize)
+Canvas |> with addHandler(:click) fn(evt) if {
+	evt.altKey, evt.metaKey -> {
+		{ clientX: x, clientY: y } := evt
+		Light <- [x, y]
+		draw()
+	}
+	_ -> {
+		{ clientX: x, clientY: y } := evt
+		makeHuman(x, y)
+		draw()
+	}
+}
+querySelector('.randomizeButton') |> with addHandler(:click) fn {
+	randomize(10)
+}
+querySelector('.clearButton') |> with addHandler(:click) fn {
+	Origins <- []
+	Heads <- []
+	Torsos <- []
+	LeftArms <- []
+	RightArms <- []
+	LeftLegs <- []
+	RightLegs <- []
+	draw()
+}
+
+// random first generation of humans
+math.max(
+	10
+	int(InnerWidth * InnerHeight / 40000)
+) |> randomize()
+
