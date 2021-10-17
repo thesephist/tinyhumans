@@ -35,13 +35,19 @@ querySelectorAll := bind(document, :querySelectorAll)
 fn addHandler(el, name, handler) bind(el, :addEventListener)(string(name), handler)
 
 // Canvas bindings
-// TODO: explain late-bound canvas bindings
+//
+// For performance reasons, shadows (which are blurred in CSS) and the main
+// human silhouettes are rendered on different canvas elements. For
+// convenience, we use the same API wrapperes to draw to both canvases, and
+// swap out the backing 2D canvas context (Canvas, Ctx) dynamically. This is
+// probably not the best idea for perf but seems ~fast enough.
 Canvas := querySelector('#silhouettes')
 Ctx := bind(Canvas, :getContext)('2d')
 SilhouetteCanvas := querySelector('#silhouettes')
 SilhouetteCtx := bind(Canvas, :getContext)('2d')
 ShadowCanvas := querySelector('#shadows')
 ShadowCtx := bind(ShadowCanvas, :getContext)('2d')
+
 fn ctxCall(name, args...) bind(Ctx, name)(args...)
 
 fn path(points) {
@@ -138,7 +144,6 @@ fn makeHuman(x, y, posture) {
 	}, posture)
 
 	// define points
-	// TODO: add a child mode
 	Origins << [x, y]
 	Heads << if posture.facing {
 		:left -> [x + Scale, y - 11 * Scale]
@@ -206,7 +211,15 @@ fn draw {
 	ctxCall(:clearRect, 0, 0, Canvas.width, Canvas.height)
 
 	// tight contact shadow 
-	// TODO: explain why this exists
+	//
+	// For shadows to be realistic, it can't have equal Gaussian blur all the
+	// way through -- parts of the shadow that are closer to the human figure
+	// should look "tighter", with a darker shade and less blur.
+	//
+	// Because we cannot have such fine-grained control over the shadow's blur,
+	// instead we use the trick of rendering a non-blurred shadow of the legs
+	// and cross-fading it into the real shadow with a transparent linear
+	// gradient.
 	Gradients := Origins |> with map() fn(origin) {
 		[x, y] := origin
 		grad := ctxCall(:createLinearGradient
@@ -283,7 +296,10 @@ Canvas |> with addHandler(:click) fn(evt) if {
 	}
 	_ -> {
 		{ clientX: x, clientY: y } := evt
-		makeHuman(x, y)
+		// the "origin" of a human is on their left foot, so
+		// we offset it slightly so that it feels as if the
+		// clicked point is in the center
+		makeHuman(x - Scale, y)
 		draw()
 	}
 }
@@ -303,7 +319,7 @@ querySelector('.clearButton') |> with addHandler(:click) fn {
 
 // random first generation of humans
 math.max(
-	10
+	12
 	int(InnerWidth * InnerHeight / 40000)
 ) |> randomize()
 

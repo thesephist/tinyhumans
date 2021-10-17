@@ -27,13 +27,39 @@ canvas {
 	left: 50%;
 	transform: translate(-50%, -50%);
 	text-align: center;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	pointer-events: none;
 }
 #app h1, p {
 	font-size: 1em;
 	margin: 0;
-	pointer-events: none;
+	margin-bottom: 8px;
 }
-#app a {
+#app a,
+#app button {
+	color: inherit;
+	pointer-events: all;
+}
+#app .buttons {
+	display: flex;
+	flex-direction: row;
+	gap: 1em;
+}
+#app .button,
+#app a.button {
+	color: rgba(0, 0, 0, .5);
+	display: inline;
+	text-decoration: underline;
+	cursor: pointer;
+	background: transparent;
+	border: 0;
+	padding: 0;
+	font-size: 1em;
+}
+
+#app .button:hover {
 	color: inherit;
 }
 </style>
@@ -42,15 +68,17 @@ canvas {
 <div id="app">
 	<h1>Tiny humans</h1>
 	<p>
-		a project by
+		a tiny project by
 		<a href="https://thesephist.com" target="_blank">Linus</a>,
 		built with
 		<a href="https://oaklang.org/" target="_blank">Oak</a>.
 	</p>
 	<div class="buttons">
-		<button class="randomizeButton">randomize</button>
-		<button class="aboutButton">about</button>
-		<button class="clearButton">clear</button>
+		<button class="button randomizeButton">randomize</button>
+		<a href="https://github.com/thesephist/tinyhumans" class="button aboutButton">
+			about
+		</a>
+		<button class="button clearButton">clear</button>
 	</div>
 </div>
 <script src="/bundle.js"></script>
