@@ -5,6 +5,7 @@
 	slice: slice
 	map: map
 	each: each
+	filter: filter
 	merge: merge
 	append: append
 	partition: partition
@@ -17,9 +18,11 @@ math := import('math')
 } := import('random')
 
 // global state
+Scale := 3
+SpeechDuration := 3
+SpeechFrequency := 100
 InnerWidth := window.innerWidth
 InnerHeight := window.innerHeight
-Scale := 3
 Light := [InnerWidth, 0]
 Origins := []
 Heads := []
@@ -28,6 +31,7 @@ LeftArms := []
 RightArms := []
 LeftLegs := []
 RightLegs := []
+SpeechBubbles := []
 
 // DOM bindings
 querySelector := bind(document, :querySelector)
@@ -170,6 +174,55 @@ fn makeHuman(x, y, posture) {
 		posture.rightKnee, 2 * Scale)
 }
 
+fn makeSpeech if len(Origins) {
+	// if blank, wait 2 seconds and check again
+	0 -> with wait(2) fn {
+		makeSpeech()
+	}
+	_ -> {
+		[x, y] := choice(Origins)
+		speech := [
+			x + 1.5 * Scale, y - 11 * Scale
+			choice([:left, :right])
+			choice([
+				'Hello, World!'
+				'What\'s up?'
+				'How\'s it going?'
+				'What a day!'
+				'Excuse me!'
+				'Thank you!'
+				'I\'m sorry...'
+				'No problem!'
+				'Of course!'
+				'You gotta see this!'
+				'Sorry I\'m late,'
+				'I love you!'
+				'It\'s nothing.'
+				'Have you both met?'
+				'Never mind...'
+				'What do you mean?'
+				'You should join us!'
+				'Goodbye!'
+				'Have a safe flight!'
+				'What the $#!?'
+			])
+		]
+
+		SpeechBubbles << speech
+		draw()
+
+		with wait(SpeechDuration) fn {
+			SpeechBubbles <- SpeechBubbles |> with filter() fn(sp) sp != speech
+			draw()
+		}
+
+		// the more people, the more often they speak
+		with wait(math.min(SpeechFrequency / len(Origins), SpeechDuration + 1)) fn {
+			makeSpeech()
+		}
+	}
+}
+
 fn draw {
 	Ctx <- ShadowCtx
 	Ctx.lineWidth := Scale
@@ -210,7 +263,7 @@ fn draw {
 	Ctx.filter := 'none'
 	ctxCall(:clearRect, 0, 0, Canvas.width, Canvas.height)
 
-	// tight contact shadow 
+	// tight contact shadow
 	//
 	// For shadows to be realistic, it can't have equal Gaussian blur all the
 	// way through -- parts of the shadow that are closer to the human figure
@@ -254,6 +307,45 @@ fn draw {
 	RightArms |> with each() fn(arm) path(arm)
 	LeftLegs |> with each() fn(leg) path(leg)
 	RightLegs |> with each() fn(leg) path(leg)
+
+	// speech bubbles
+	Ctx.lineWidth := 1
+	Ctx.textAlign := 'center'
+	Ctx.font := 'normal 14px system-ui, sans-serif'
+	SpeechBubbles |> with each() fn(speech) {
+		[x, y, dir, text] := speech
+		start := bearing(
+			x, y
+			if dir {
+				:left -> angle(-90)
+				_ -> angle(90)
+			}
+			2.5 * Scale
+		)
+		midpoint := bearing(
+			x, y
+			if dir {
+				:left -> angle(-105)
+				_ -> angle(100)
+			}
+			5 * Scale
+		)
+		endpoint := bearing(
+			midpoint.0, midpoint.1
+			if dir {
+				:left -> angle(-150)
+				_ -> angle(150)
+			}
+			3 * Scale
+		)
+
+		path([
+			start
+			midpoint
+			endpoint
+		])
+		ctxCall(:fillText, text, endpoint.0, endpoint.1 - 2 * Scale)
+	}
 }
 
 // handlers
@@ -303,6 +395,7 @@ Canvas |> with addHandler(:click) fn(evt) if {
 		draw()
 	}
 }
+
 querySelector('.randomizeButton') |> with addHandler(:click) fn {
 	randomize(10)
 }
@@ -314,6 +407,7 @@ querySelector('.clearButton') |> with addHandler(:click) fn {
 	RightArms <- []
 	LeftLegs <- []
 	RightLegs <- []
+	SpeechBubbles <- []
 	draw()
 }
 
@@ -322,4 +416,5 @@ math.max(
 	12
 	int(InnerWidth * InnerHeight / 40000)
 ) |> randomize()
+makeSpeech()
 
