@@ -363,16 +363,23 @@ fn handleResize {
 fn randomize(n) {
 	margin := Scale * 12
 
-	// TODO: disable spawning around the text boundary. This can be
-	// deterministically set because max width is smaller than mobile screens.
-	// A "more" button or something like that can just open a popup.
 	fn randomCoord [
 		integer(margin, InnerWidth - margin)
 		integer(margin, InnerHeight - margin)
 	]
 
+	// avoid spawning over the title text, in the middle 100x250-ish area
+	cx := InnerWidth / 2
+	cy := InnerHeight / 2
+	fn inCenter?(pt) {
+		[x, y] := pt
+		cx - 125 < x & cx + 125 > x &
+			cy - 50 < y & cy + 50 + 8 * Scale > y
+	}
+
 	range(n) |>
 		map(randomCoord) |>
+		filter(fn(pt) !inCenter?(pt)) |>
 		with each() fn(pt) makeHuman(pt.0, pt.1)
 	draw()
 }
