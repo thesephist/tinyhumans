@@ -110,7 +110,7 @@ fn shadow(pt, origin) {
 }
 
 fn makeHuman(x, y, posture) {
-	// the rest of 
+	// the rest of
 	x := x - Scale
 
 	posture := posture |> default({})
@@ -381,13 +381,15 @@ fn randomize(n) {
 		integer(margin, DrawHeight - margin)
 	]
 
-	// avoid spawning over the title text, in the middle 100x250-ish area
+	// avoid spawning over the title text, in the middle area
 	cx := DrawWidth / 2
 	cy := DrawHeight / 2
 	fn inCenter?(pt) {
 		[x, y] := pt
+		// we add some scaled padding in vertical directions because shadows
+		// and tiny human height extend vertically beyond their origins.
 		cx - 110 < x & cx + 110 > x &
-			cy - 50 - 4 * Scale < y & cy + 50 + 11 * Scale > y
+			cy - 50 - 5 * Scale < y & cy + 50 + 14 * Scale > y
 	}
 
 	range(n) |>
@@ -436,6 +438,10 @@ querySelector('.clearButton') |> with addHandler(:click) fn {
 	RightLegs <- []
 	SpeechBubbles <- []
 	draw()
+}
+querySelector('.hideButton') |> with addHandler(:click) fn {
+	app := querySelector('#app')
+	bind(app.parentNode, :removeChild)(app)
 }
 
 // random first generation of humans
