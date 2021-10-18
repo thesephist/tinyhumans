@@ -8,22 +8,36 @@
 	filter: filter
 	merge: merge
 	append: append
+	indexOf: indexOf
 	partition: partition
 } := import('std')
 math := import('math')
+sort := import('sort')
 {
 	integer: integer
 	number: number
 	choice: choice
 } := import('random')
 
-// global state
+// rendering configs
 DPI := window.devicePixelRatio |> default(1)
+// every size is measured as a multiple of Scale, to allow
+// for easily experimieneting with human size.
 Scale := 3
+// how long should a speech bubble stay visible?
 SpeechDuration := 3
+// how often should a speech bubble appear, scaled to the
+// population size? A bit of a magic number from trial and
+// error.
 SpeechFrequency := 100
+// cached for convenient access without expensive `get` calls to the global
+// window object.
 DrawWidth := window.innerWidth
 DrawHeight := window.innerHeight
+
+// "game" state
+//
+// tinyhuman uses a data-oriented architecture TODO: explain
 Light := [DrawWidth, 0]
 Origins := []
 Heads := []
@@ -44,8 +58,8 @@ fn addHandler(el, name, handler) bind(el, :addEventListener)(string(name), handl
 // For performance reasons, shadows (which are blurred in CSS) and the main
 // human silhouettes are rendered on different canvas elements. For
 // convenience, we use the same API wrapperes to draw to both canvases, and
-// swap out the backing 2D canvas context (Canvas, Ctx) dynamically. This is
-// probably not the best idea for perf but seems ~fast enough.
+// swap out the backing 2D canvas context (Ctx) dynamically. This is probably
+// not the best idea for perf but seems ~fast enough.
 SilhouetteCanvas := querySelector('#silhouettes')
 SilhouetteCtx := bind(SilhouetteCanvas, :getContext)('2d')
 ShadowCanvas := querySelector('#shadows')
@@ -55,6 +69,7 @@ Ctx <- SilhouetteCtx
 
 fn ctxCall(name, args...) bind(Ctx, name)(args...)
 
+// path takes a list of [x, y] points and draws a path between them
 fn path(points) {
 	start := points.0
 	ctxCall(:beginPath)
@@ -65,6 +80,8 @@ fn path(points) {
 	ctxCall(:stroke)
 }
 
+// fill takes a list of [x, y] points and draws a polygon across all of them
+// that is then filled in
 fn fill(points) {
 	ctxCall(:beginPath)
 	start := points.0
@@ -75,6 +92,7 @@ fn fill(points) {
 	ctxCall(:fill)
 }
 
+// circle draws a filled circle
 fn circle(center, radius) {
 	ctxCall(:beginPath)
 	ctxCall(:arc, center.0, center.1, radius, 0, 2 * math.Pi)
@@ -85,17 +103,28 @@ fn circle(center, radius) {
 // returns radians from the positive right axis, clockwise.
 fn angle(deg)(-deg + 90) / 180 * math.Pi
 
+// bearing takes an [x, y] point, an angle measured from south, and a distance;
+// and returns the [x', y'] of the resulting point.
 fn bearing(x, y, angle, dist) [
 	x + cos(angle) * dist
 	y + sin(angle) * dist
 ]
 
+// limb is a helper that takes a start [x, y], and angles and lengths of the
+// upper and lower limbs and returns a list of the three points that form the
+// limb path.
+//
+// limb does not itself draw these points, so that we can take these points and
+// transform them to render their shadows too.
 fn limb(start, deg1, len1, deg2, len2) [
 	p := start
 	p := bearing(p.0, p.1, angle(deg1), len1)
 	bearing(p.0, p.1, angle(deg1 + deg2), len2)
 ]
 
+// shadow takes an [x, y] point and an origin, and returns an [x', y'] of the
+// shadow that point casts relative to that origin. Practically, what this
+// means is `pt` is a point on a person and `origin` is where they stand.
 fn shadow(pt, origin) {
 	[x, y] := origin
 	[ox, oy] := pt
@@ -109,13 +138,24 @@ fn shadow(pt, origin) {
 	]
 }
 
+// makeHuman takes an [x, y] where a human should stand, and a posture
+// configuration object, and adds a human at that point with the given posture.
+// If no posture is given, a random one will be generated.
+//
+// NOTE: makeHuman does _not_ force a re-draw of the canvas. Call `draw()` to
+// re-draw the canvas with new humans.
 fn makeHuman(x, y, posture) {
-	// the rest of
+	// the rest of this function assumes that [x, y] describe the _left corner_
+	// of where a human stands, but we want to be able to pass in something
+	// that feels closer to the center of where they stand. So we offset it by
+	// Scale. Just an ergonomics thing.
 	x := x - Scale
 
 	posture := posture |> default({})
 	facing := posture.facing |> default(choice([:forward, :left, :right]))
 	posture := merge({
+		// arms: if the human faces left (or right), we don't want their left
+		// (or right) elbows to bend backwards. The same for the right elbow.
 		leftShoulder: number(-80, 0)
 		leftElbow: if facing {
 			:left -> number(-135, 0)
@@ -129,6 +169,8 @@ fn makeHuman(x, y, posture) {
 			_ -> number(-20, 135)
 		}
 
+		// legs: we don't want the human's knees to bend backwards if they're
+		// facing left or right.
 		leftHip: if facing {
 			:left -> number(-70, 30)
 			:right -> number(-80, 20)
@@ -151,7 +193,6 @@ fn makeHuman(x, y, posture) {
 		}
 	}, posture)
 
-	// define points
 	Origins << [x, y]
 	Heads << if posture.facing {
 		:left -> [x + Scale, y - 11 * Scale]
@@ -178,12 +219,15 @@ fn makeHuman(x, y, posture) {
 		posture.rightKnee, 2 * Scale)
 }
 
+// makeSpeech picks a random human, gives them a speech bubble, and re-draws
+// the canvas to display it.
 fn makeSpeech if len(Origins) {
-	// if blank, wait 2 seconds and check again
+	// if no humans exist, wait 2 seconds and check again
 	0 -> with wait(2) fn {
 		makeSpeech()
 	}
 	_ -> {
+		// pick a random human's positino
 		[x, y] := choice(Origins)
 		speech := [
 			x + 1.5 * Scale, y - 11 * Scale
@@ -218,18 +262,23 @@ fn makeSpeech if len(Origins) {
 		SpeechBubbles << speech
 		draw()
 
+		// after `SpeechDuration`, delete this speech bubble
 		with wait(SpeechDuration) fn {
 			SpeechBubbles <- SpeechBubbles |> with filter() fn(sp) sp != speech
 			draw()
 		}
 
-		// the more people, the more often they speak
+		// recursively call itself to loop. The more people, the more often
+		// they should speak, so the shorter the timeout.
 		with wait(math.min(SpeechFrequency / len(Origins), SpeechDuration + 1)) fn {
 			makeSpeech()
 		}
 	}
 }
 
+// draw clears the canvas, takes the whole "game" state, and re-draws it all on
+// the new canvas. Note that there are really two canvases, one for the shadows
+// and one for the silhouettes and speech bubbles.
 fn draw {
 	Ctx <- ShadowCtx
 	Ctx.lineWidth := Scale
@@ -239,6 +288,9 @@ fn draw {
 	ctxCall(:clearRect, 0, 0, Canvas.width, Canvas.height)
 
 	// contact shadows
+	//
+	// take each list of points, transform it with `shadow()` with respect to
+	// the human's origin, and render.
 	Heads |> with each() fn(head, i) {
 		circle(head |> shadow(Origins.(i)), Scale)
 	}
@@ -276,12 +328,12 @@ fn draw {
 	//
 	// For shadows to be realistic, it can't have equal Gaussian blur all the
 	// way through -- parts of the shadow that are closer to the human figure
-	// should look "tighter", with a darker shade and less blur.
+	// should look more defined, with a darker shade and less blur.
 	//
-	// Because we cannot have such fine-grained control over the shadow's blur,
-	// instead we use the trick of rendering a non-blurred shadow of the legs
-	// and cross-fading it into the real shadow with a transparent linear
-	// gradient.
+	// Because we cannot have such fine-grained control over the shadow's blur
+	// using well-supported 2D Canvas APIs, instead we use the trick of
+	// rendering a non-blurred shadow of the legs and cross-fading it into the
+	// real shadow with a transparent linear gradient.
 	Gradients := Origins |> with map() fn(origin) {
 		[x, y] := origin
 		grad := ctxCall(:createLinearGradient
@@ -295,17 +347,13 @@ fn draw {
 		origin := Origins.(i)
 		grad := Gradients.(i)
 		Ctx.strokeStyle := grad
-		path(leg |> map(fn(pt) {
-			shadow(pt, origin)
-		}))
+		path(leg |> map(fn(pt) shadow(pt, origin)))
 	}
 	RightLegs |> with each() fn(leg, i) {
 		origin := Origins.(i)
 		grad := Gradients.(i)
 		Ctx.strokeStyle := grad
-		path(leg |> map(fn(pt) {
-			shadow(pt, origin)
-		}))
+		path(leg |> map(fn(pt) shadow(pt, origin)))
 	}
 
 	// silhouettes
@@ -323,6 +371,9 @@ fn draw {
 	Ctx.font := 'normal 12px system-ui, sans-serif'
 	SpeechBubbles |> with each() fn(speech) {
 		[x, y, dir, text] := speech
+
+		// a speech bubble's "line" is two line segments imitating a curve. It
+		// starts a little away from the head, and reaches just below the text.
 		start := bearing(
 			x, y
 			if dir {
@@ -348,15 +399,13 @@ fn draw {
 			3 * Scale
 		)
 
-		path([
-			start
-			midpoint
-			endpoint
-		])
+		path([start, midpoint, endpoint])
 		ctxCall(:fillText, text, endpoint.0, endpoint.1 - 2 * Scale)
 	}
 }
 
+// handleResize resets and re-renders the canvas when something about the
+// screen changes.
 fn handleResize {
 	DrawWidth <- window.innerWidth
 	DrawHeight <- window.innerHeight
@@ -373,7 +422,10 @@ fn handleResize {
 	draw()
 }
 
-fn randomize(n) {
+// addRandomHumans draws `n` randomly positioned humans on the map. Humans are
+// guaranteed not to lie within some margin of the screen edges, and guaranteed
+// not to overlap with the center bit of text.
+fn addRandomHumans(n) {
 	margin := Scale * 12
 
 	fn randomCoord [
@@ -395,7 +447,7 @@ fn randomize(n) {
 	range(n) |>
 		map(randomCoord) |>
 		filter(fn(pt) !inCenter?(pt)) |>
-		with each() fn(pt) makeHuman(pt.0, pt.1)
+		each(fn(pt) makeHuman(pt.0, pt.1))
 	draw()
 }
 
@@ -403,21 +455,41 @@ fn randomize(n) {
 handleResize()
 window |> addHandler(:resize, handleResize)
 Canvas |> with addHandler(:click) fn(evt) if {
+	// Ctrl/Cmd means move the light source here
 	evt.altKey, evt.metaKey -> {
 		{ clientX: x, clientY: y } := evt
 		Light <- [x, y]
 		draw()
 	}
-	_ -> {
+	// Shift means delete the closest human
+	evt.shiftKey -> {
 		{ clientX: x, clientY: y } := evt
-		// the "origin" of a human is on their left foot, so
-		// we offset it slightly so that it feels as if the
-		// clicked point is in the center
-		makeHuman(x, y)
+		closestHumanOrigin := sort.sort(Origins, fn(origin) {
+			[ox, oy] := origin
+			(x - ox) * (x - ox) + (y - oy) * (y - oy)
+		}).0
+		closestHumanIndex := Origins |> indexOf(closestHumanOrigin)
+		atIndex? := fn(_, i) i != closestHumanIndex
+
+		// "delete" the human by filtering the points at that index out of the
+		// global lists.
+		Origins <- Origins |> filter(atIndex?)
+		Heads <- Heads |> filter(atIndex?)
+		Torsos <- Torsos |> filter(atIndex?)
+		LeftArms <- LeftArms |> filter(atIndex?)
+		RightArms <- RightArms |> filter(atIndex?)
+		LeftLegs <- LeftLegs |> filter(atIndex?)
+		RightLegs <- RightLegs |> filter(atIndex?)
+		draw()
+	}
+	// normal click adds a human
+	_ -> {
+		makeHuman(evt.clientX, evt.clientY)
 		draw()
 	}
 }
 
+// link up button actions
 querySelector('.clickMapButton') |> with addHandler(:click) fn(evt) {
 	originalText := evt.target.textContent
 	evt.target.textContent := 'not here! the map!!'
@@ -426,7 +498,7 @@ querySelector('.clickMapButton') |> with addHandler(:click) fn(evt) {
 	}
 }
 querySelector('.randomizeButton') |> with addHandler(:click) fn {
-	randomize(10)
+	addRandomHumans(10)
 }
 querySelector('.clearButton') |> with addHandler(:click) fn {
 	Origins <- []
@@ -448,6 +520,8 @@ querySelector('.hideButton') |> with addHandler(:click) fn {
 math.max(
 	12
 	int(window.innerWidth * window.innerHeight / 40000)
-) |> randomize()
+) |> addRandomHumans()
+
+// start the speech-generating loop
 makeSpeech()
 
