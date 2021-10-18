@@ -110,6 +110,9 @@ fn shadow(pt, origin) {
 }
 
 fn makeHuman(x, y, posture) {
+	// the rest of 
+	x := x - Scale
+
 	posture := posture |> default({})
 	facing := posture.facing |> default(choice([:forward, :left, :right]))
 	posture := merge({
@@ -205,7 +208,7 @@ fn makeSpeech if len(Origins) {
 				'You should join us!'
 				'Goodbye!'
 				'Have a safe flight!'
-				'What the $#!?'
+				'What the #!$?'
 				'What happened?'
 				'Did you see that tweet?'
 				'Are you on Instagram?'
@@ -383,8 +386,8 @@ fn randomize(n) {
 	cy := DrawHeight / 2
 	fn inCenter?(pt) {
 		[x, y] := pt
-		cx - 120 < x & cx + 120 > x &
-			cy - 50 < y & cy + 50 + 8 * Scale > y
+		cx - 110 < x & cx + 110 > x &
+			cy - 50 - 4 * Scale < y & cy + 50 + 11 * Scale > y
 	}
 
 	range(n) |>
@@ -408,11 +411,18 @@ Canvas |> with addHandler(:click) fn(evt) if {
 		// the "origin" of a human is on their left foot, so
 		// we offset it slightly so that it feels as if the
 		// clicked point is in the center
-		makeHuman(x - Scale, y)
+		makeHuman(x, y)
 		draw()
 	}
 }
 
+querySelector('.clickMapButton') |> with addHandler(:click) fn(evt) {
+	originalText := evt.target.textContent
+	evt.target.textContent := 'not here! the map!!'
+	with wait(2) fn {
+		evt.target.textContent := originalText
+	}
+}
 querySelector('.randomizeButton') |> with addHandler(:click) fn {
 	randomize(10)
 }

@@ -37,49 +37,55 @@ canvas {
 #app p {
 	margin: 0;
 	width: 24ch;
+    margin-bottom: 8px;
+}
+#app a:hover {
+    background: #000;
+    color: #fff;
 }
 #app a,
 #app button {
 	color: inherit;
 	pointer-events: all;
 }
-#app .buttons {
-	display: flex;
-	flex-direction: row;
-	gap: 1em;
-}
-#app .button,
-#app a.button {
+#app .button {
+	font-family: system-ui, sans-serif;
 	color: rgba(0, 0, 0, .5);
-	display: inline;
+	display: block;
 	text-decoration: underline;
 	cursor: pointer;
 	background: transparent;
 	border: 0;
+	margin: auto;
 	padding: 0;
-	font-size; inherit;
+	font-size: inherit;
+    line-height: inherit;
 }
-
 #app .button:hover {
 	color: inherit;
+}
+#app .button:hover::before {
+    content: '→ ';
+}
+#app .button:hover::after {
+    content: ' ←';
 }
 </style>
 <canvas id="shadows" style="width:0;height:0"></canvas>
 <canvas id="silhouettes" style="width:0;height:0"></canvas>
 <div id="app">
 	<p>
-		<strong>Tiny humans.</strong>
+		<strong><a href="https://github.com/thesephist/tinyhumans">Tiny humans.</a></strong>
 		a tiny project by
 		<a href="https://thesephist.com" target="_blank">Linus</a>,
 		built with
 		<a href="https://oaklang.org/" target="_blank">Oak</a>.
 	</p>
 	<div class="buttons">
-		<button class="button randomizeButton">randomize</button>
-		<a href="https://github.com/thesephist/tinyhumans" class="button aboutButton">
-			about
-		</a>
-		<button class="button clearButton">clear</button>
+        <button class="button clickMapButton">click map for tiny humans</button>
+		<button class="button randomizeButton">even more humans!</button>
+		<button class="button clearButton">extinction!</button>
 	</div>
 </div>
 <script src="/bundle.js"></script>
+
