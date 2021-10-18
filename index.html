@@ -8,9 +8,9 @@ body {
 	height: 100vh;
 	width: 100vw;
 	overflow: hidden;
-	perspective: 300px;
 	background-size: cover;
 	background-image: url('/paper.jpg');
+	background-position: center center;
 }
 canvas {
 	position: absolute;
@@ -32,6 +32,7 @@ canvas {
 	align-items: center;
 	pointer-events: none;
 	line-height: 1.4em;
+	font-size: 14px;
 }
 #app p {
 	margin: 0;
@@ -56,15 +57,15 @@ canvas {
 	background: transparent;
 	border: 0;
 	padding: 0;
-	font-size: 1em;
+	font-size; inherit;
 }
 
 #app .button:hover {
 	color: inherit;
 }
 </style>
-<canvas id="shadows"></canvas>
-<canvas id="silhouettes"></canvas>
+<canvas id="shadows" style="width:0;height:0"></canvas>
+<canvas id="silhouettes" style="width:0;height:0"></canvas>
 <div id="app">
 	<p>
 		<strong>Tiny humans.</strong>

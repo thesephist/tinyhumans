@@ -18,12 +18,13 @@ math := import('math')
 } := import('random')
 
 // global state
+DPI := window.devicePixelRatio |> default(1)
 Scale := 3
 SpeechDuration := 3
 SpeechFrequency := 100
-InnerWidth := window.innerWidth
-InnerHeight := window.innerHeight
-Light := [InnerWidth, 0]
+DrawWidth := window.innerWidth
+DrawHeight := window.innerHeight
+Light := [DrawWidth, 0]
 Origins := []
 Heads := []
 Torsos := []
@@ -45,12 +46,12 @@ fn addHandler(el, name, handler) bind(el, :addEventListener)(string(name), handl
 // convenience, we use the same API wrapperes to draw to both canvases, and
 // swap out the backing 2D canvas context (Canvas, Ctx) dynamically. This is
 // probably not the best idea for perf but seems ~fast enough.
-Canvas := querySelector('#silhouettes')
-Ctx := bind(Canvas, :getContext)('2d')
 SilhouetteCanvas := querySelector('#silhouettes')
-SilhouetteCtx := bind(Canvas, :getContext)('2d')
+SilhouetteCtx := bind(SilhouetteCanvas, :getContext)('2d')
 ShadowCanvas := querySelector('#shadows')
 ShadowCtx := bind(ShadowCanvas, :getContext)('2d')
+Canvas <- SilhouetteCanvas
+Ctx <- SilhouetteCtx
 
 fn ctxCall(name, args...) bind(Ctx, name)(args...)
 
@@ -98,8 +99,8 @@ fn limb(start, deg1, len1, deg2, len2) [
 fn shadow(pt, origin) {
 	[x, y] := origin
 	[ox, oy] := pt
-	squish := (y - Light.1) / InnerHeight * 1.5
-	skew := (x - Light.0) / InnerWidth * 1.5
+	squish := (y - Light.1) / DrawHeight * 1.5
+	skew := (x - Light.0) / DrawWidth * 1.5
 	[
 		// skew horizontally
 		ox + skew * (y - oy)
@@ -205,6 +206,9 @@ fn makeSpeech if len(Origins) {
 				'Goodbye!'
 				'Have a safe flight!'
 				'What the $#!?'
+				'What happened?'
+				'Did you see that tweet?'
+				'Are you on Instagram?'
 			])
 		]
 
@@ -228,6 +232,7 @@ fn draw {
 	Ctx.lineWidth := Scale
 	Ctx.strokeStyle := 'rgba(0, 0, 0, .3)'
 	Ctx.fillStyle := 'rgba(0, 0, 0, .3)'
+	ctxCall(:setTransform, DPI, 0, 0, DPI, 0, 0)
 	ctxCall(:clearRect, 0, 0, Canvas.width, Canvas.height)
 
 	// contact shadows
@@ -261,6 +266,7 @@ fn draw {
 	Ctx.lineJoin := 'round'
 	Ctx.fillStyle := '#000000'
 	Ctx.filter := 'none'
+	ctxCall(:setTransform, DPI, 0, 0, DPI, 0, 0)
 	ctxCall(:clearRect, 0, 0, Canvas.width, Canvas.height)
 
 	// tight contact shadow
@@ -311,7 +317,7 @@ fn draw {
 	// speech bubbles
 	Ctx.lineWidth := 1
 	Ctx.textAlign := 'center'
-	Ctx.font := 'normal 14px system-ui, sans-serif'
+	Ctx.font := 'normal 12px system-ui, sans-serif'
 	SpeechBubbles |> with each() fn(speech) {
 		[x, y, dir, text] := speech
 		start := bearing(
@@ -348,15 +354,19 @@ fn draw {
 	}
 }
 
-// handlers
 fn handleResize {
-	InnerWidth <- window.innerWidth
-	InnerHeight <- window.innerHeight
+	DrawWidth <- window.innerWidth
+	DrawHeight <- window.innerHeight
 
-	SilhouetteCanvas.width := InnerWidth
-	SilhouetteCanvas.height := InnerHeight
-	ShadowCanvas.width := InnerWidth
-	ShadowCanvas.height := InnerHeight
+	SilhouetteCanvas.width := int(window.innerWidth * DPI)
+	SilhouetteCanvas.height := int(window.innerHeight * DPI)
+	SilhouetteCanvas.style.width := string(DrawWidth) + 'px'
+	SilhouetteCanvas.style.height := string(DrawHeight) + 'px'
+	ShadowCanvas.width := int(window.innerWidth * DPI)
+	ShadowCanvas.height := int(window.innerHeight * DPI)
+	ShadowCanvas.style.width := string(DrawWidth) + 'px'
+	ShadowCanvas.style.height := string(DrawHeight) + 'px'
+
 	draw()
 }
 
@@ -364,16 +374,16 @@ fn randomize(n) {
 	margin := Scale * 12
 
 	fn randomCoord [
-		integer(margin, InnerWidth - margin)
-		integer(margin, InnerHeight - margin)
+		integer(margin, DrawWidth - margin)
+		integer(margin, DrawHeight - margin)
 	]
 
 	// avoid spawning over the title text, in the middle 100x250-ish area
-	cx := InnerWidth / 2
-	cy := InnerHeight / 2
+	cx := DrawWidth / 2
+	cy := DrawHeight / 2
 	fn inCenter?(pt) {
 		[x, y] := pt
-		cx - 125 < x & cx + 125 > x &
+		cx - 120 < x & cx + 120 > x &
 			cy - 50 < y & cy + 50 + 8 * Scale > y
 	}
 
@@ -421,7 +431,7 @@ querySelector('.clearButton') |> with addHandler(:click) fn {
 // random first generation of humans
 math.max(
 	12
-	int(InnerWidth * InnerHeight / 40000)
+	int(window.innerWidth * window.innerHeight / 40000)
 ) |> randomize()
 makeSpeech()
 
