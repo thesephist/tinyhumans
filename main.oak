@@ -37,7 +37,12 @@ DrawHeight := window.innerHeight
 
 // "game" state
 //
-// tinyhuman uses a data-oriented architecture TODO: explain
+// tinyhuman uses a data-oriented architecture, keeping different ... uh ...
+// body parts in different lists so they can be rendered each in their own
+// rendering passes. This simplifies the code and makes 2D canvas state
+// management more efficient, as fewer costly state changes (color, stroke
+// style, fills) need to be made -- only in between each body part pass rather
+// than multiple times per render of a "human".
 Light := [DrawWidth, 0]
 Origins := []
 Heads := []
