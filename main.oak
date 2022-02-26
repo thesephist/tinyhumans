@@ -48,11 +48,6 @@ LeftLegs := []
 RightLegs := []
 SpeechBubbles := []
 
-// DOM bindings
-querySelector := bind(document, :querySelector)
-querySelectorAll := bind(document, :querySelectorAll)
-fn addHandler(el, name, handler) bind(el, :addEventListener)(string(name), handler)
-
 // Canvas bindings
 //
 // For performance reasons, shadows (which are blurred in CSS) and the main
@@ -60,43 +55,41 @@ fn addHandler(el, name, handler) bind(el, :addEventListener)(string(name), handl
 // convenience, we use the same API wrapperes to draw to both canvases, and
 // swap out the backing 2D canvas context (Ctx) dynamically. This is probably
 // not the best idea for perf but seems ~fast enough.
-SilhouetteCanvas := querySelector('#silhouettes')
-SilhouetteCtx := bind(SilhouetteCanvas, :getContext)('2d')
-ShadowCanvas := querySelector('#shadows')
-ShadowCtx := bind(ShadowCanvas, :getContext)('2d')
+SilhouetteCanvas := document.querySelector('#silhouettes')
+SilhouetteCtx := SilhouetteCanvas.getContext('2d')
+ShadowCanvas := document.querySelector('#shadows')
+ShadowCtx := ShadowCanvas.getContext('2d')
 Canvas <- SilhouetteCanvas
 Ctx <- SilhouetteCtx
-
-fn ctxCall(name, args...) bind(Ctx, name)(args...)
 
 // path takes a list of [x, y] points and draws a path between them
 fn path(points) {
 	start := points.0
-	ctxCall(:beginPath)
-	ctxCall(:moveTo, start.0, start.1)
+	Ctx.beginPath()
+	Ctx.moveTo(start.0, start.1)
 	points |> slice(1) |> with each() fn(pt) {
-		ctxCall(:lineTo, pt.0, pt.1)
+		Ctx.lineTo(pt.0, pt.1)
 	}
-	ctxCall(:stroke)
+	Ctx.stroke()
 }
 
 // fill takes a list of [x, y] points and draws a polygon across all of them
 // that is then filled in
 fn fill(points) {
-	ctxCall(:beginPath)
+	Ctx.beginPath()
 	start := points.0
-	ctxCall(:moveTo, start.0, start.1)
+	Ctx.moveTo(start.0, start.1)
 	points |> slice(1) |> with each() fn(pt) {
-		ctxCall(:lineTo, pt.0, pt.1)
+		Ctx.lineTo(pt.0, pt.1)
 	}
-	ctxCall(:fill)
+	Ctx.fill()
 }
 
 // circle draws a filled circle
 fn circle(center, radius) {
-	ctxCall(:beginPath)
-	ctxCall(:arc, center.0, center.1, radius, 0, 2 * math.Pi)
-	ctxCall(:fill)
+	Ctx.beginPath()
+	Ctx.arc(center.0, center.1, radius, 0, 2 * math.Pi)
+	Ctx.fill()
 }
 
 // angle takes an angle in degrees measured counterclockwise from south, and
@@ -284,8 +277,8 @@ fn draw {
 	Ctx.lineWidth := Scale
 	Ctx.strokeStyle := 'rgba(0, 0, 0, .3)'
 	Ctx.fillStyle := 'rgba(0, 0, 0, .3)'
-	ctxCall(:setTransform, DPI, 0, 0, DPI, 0, 0)
-	ctxCall(:clearRect, 0, 0, Canvas.width, Canvas.height)
+	Ctx.setTransform(DPI, 0, 0, DPI, 0, 0)
+	Ctx.clearRect(0, 0, Canvas.width, Canvas.height)
 
 	// contact shadows
 	//
@@ -321,8 +314,8 @@ fn draw {
 	Ctx.lineJoin := 'round'
 	Ctx.fillStyle := '#000000'
 	Ctx.filter := 'none'
-	ctxCall(:setTransform, DPI, 0, 0, DPI, 0, 0)
-	ctxCall(:clearRect, 0, 0, Canvas.width, Canvas.height)
+	Ctx.setTransform(DPI, 0, 0, DPI, 0, 0)
+	Ctx.clearRect(0, 0, Canvas.width, Canvas.height)
 
 	// tight contact shadow
 	//
@@ -336,11 +329,12 @@ fn draw {
 	// real shadow with a transparent linear gradient.
 	Gradients := Origins |> with map() fn(origin) {
 		[x, y] := origin
-		grad := ctxCall(:createLinearGradient
+		grad := Ctx.createLinearGradient(
 			x + Scale, y
-			shadow([x + 1 * Scale, y - 4 * Scale], [x + Scale, y])...)
-		bind(grad, :addColorStop)(0, 'rgba(0, 0, 0, .2)')
-		bind(grad, :addColorStop)(1, 'rgba(0, 0, 0, 0)')
+			shadow([x + 1 * Scale, y - 4 * Scale], [x + Scale, y])...
+		)
+		grad.addColorStop(0, 'rgba(0, 0, 0, .2)')
+		grad.addColorStop(1, 'rgba(0, 0, 0, 0)')
 		grad
 	}
 	LeftLegs |> with each() fn(leg, i) {
@@ -400,7 +394,7 @@ fn draw {
 		)
 
 		path([start, midpoint, endpoint])
-		ctxCall(:fillText, text, endpoint.0, endpoint.1 - 2 * Scale)
+		Ctx.fillText(text, endpoint.0, endpoint.1 - 2 * Scale)
 	}
 }
 
@@ -453,8 +447,8 @@ fn addRandomHumans(n) {
 
 // main
 handleResize()
-window |> addHandler(:resize, handleResize)
-Canvas |> with addHandler(:click) fn(evt) if {
+window.addEventListener('resize', handleResize)
+with Canvas.addEventListener('click') fn(evt) if {
 	// Ctrl/Cmd means move the light source here
 	evt.altKey, evt.metaKey -> {
 		{ clientX: x, clientY: y } := evt
@@ -490,17 +484,17 @@ Canvas |> with addHandler(:click) fn(evt) if {
 }
 
 // link up button actions
-querySelector('.clickMapButton') |> with addHandler(:click) fn(evt) {
+with document.querySelector('.clickMapButton').addEventListener('click') fn(evt) {
 	originalText := evt.target.textContent
 	evt.target.textContent := 'not here! the map!!'
 	with wait(2) fn {
 		evt.target.textContent := originalText
 	}
 }
-querySelector('.randomizeButton') |> with addHandler(:click) fn {
+with document.querySelector('.randomizeButton').addEventListener('click') fn {
 	addRandomHumans(10)
 }
-querySelector('.clearButton') |> with addHandler(:click) fn {
+with document.querySelector('.clearButton').addEventListener('click') fn {
 	Origins <- []
 	Heads <- []
 	Torsos <- []
@@ -511,9 +505,9 @@ querySelector('.clearButton') |> with addHandler(:click) fn {
 	SpeechBubbles <- []
 	draw()
 }
-querySelector('.hideButton') |> with addHandler(:click) fn {
-	app := querySelector('#app')
-	bind(app.parentNode, :removeChild)(app)
+with document.querySelector('.hideButton').addEventListener('click') fn {
+	app := document.querySelector('#app')
+	app.parentNode.removeChild(app)
 }
 
 // random first generation of humans
